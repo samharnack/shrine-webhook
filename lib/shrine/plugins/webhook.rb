@@ -53,7 +53,7 @@ class Shrine
         route do |r|
           r.on ':t/:id/:name' do |type, id, name|
             r.post 'callback' do
-              record = type.classify.constantize.find id
+              record = CGI::unescape(type).classify.constantize.find id
               attacher = record.send "#{name}_attacher"
               promote attacher, JSON.parse(r.body.read)
               response.status = 200
