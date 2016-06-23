@@ -35,6 +35,19 @@ class Shrine
           Rails.application.routes.url_helpers.send _url_helper, _url_options
         end
 
+        def webhook_callback request
+          # {
+          #   "attachment": "{\"id\":\"video/asset/06df2595085111728e1ed31d4aab63b9.mp4\",\"storage\":\"cache\",\"metadata\":{\"size\":5856913,\"mime_type\":\"video/mp4\"}}",
+          #   "record": [
+          #     "Asset::Video",
+          #     "dd7fd925-083c-4869-928d-6d845a2c8cb5"
+          #   ],
+          #   "name": "asset",
+          #   "phase": "store"
+          # }
+          # promote get, phase: :store, payload: JSON.parse(request.body.read)
+        end
+
         def default_url_options
         end
 
@@ -53,19 +66,18 @@ class Shrine
         route do |r|
           r.on ':t/:id/:name' do |type, id, name|
             r.post 'callback' do
-              record = type.classify.constantize.find id
-              attacher = record.send "#{name}_attacher"
-              promote attacher, JSON.parse(r.body.read)
-              response.status = 200
-              request.halt
+              begin
+                record = CGI.unescape(type).classify.constantize.find id
+                attacher = record.send "#{name}_attacher"
+                attacher.webhook_callback r
+              rescue e
+                Rollbar.warning e if defined? Rollbar
+              ensure
+                response.status = 200
+                request.halt
+              end
             end
           end
-        end
-
-        private
-
-        def promote attacher, payload
-          attacher.promote attacher.get, phase: :store, payload: payload
         end
       end
     end
