@@ -21,6 +21,17 @@ class Shrine
           subclass.assign_webhook_endpoint self::WebhookEndpoint
         end
 
+        def webhook_callback identifier, request
+          raise "need to implement #{self.name}#webhook_callback(identifier, request)"
+        end
+
+        def webhook_callback_failed! exception, identifier, request
+          Rollbar.warning exception if defined? Rollbar
+          # puts "ERROR: #{exception.class.name.inspect}"
+          # puts identifier
+          # puts request
+        end
+
         # Assigns the sub-classed endpoint as the `UploadEndpoint` constant.
         def assign_webhook_endpoint klass
           endpoint_class = Class.new klass
@@ -64,14 +75,12 @@ class Shrine
 
       class App < Roda
         route do |r|
-          r.on ':t/:id/:name' do |type, id, name|
+          r.on String do |identifier|
             r.post 'callback' do
               begin
-                record = CGI.unescape(type).classify.constantize.find id
-                attacher = record.send "#{name}_attacher"
-                attacher.webhook_callback r
-              rescue e
-                Rollbar.warning e if defined? Rollbar
+                opts[:shrine_class].public_send :webhook_callback, identifier, r
+              rescue StandardError => e
+                opts[:shrine_class].public_send :webhook_callback_failed!, e, identifier, r
               ensure
                 response.status = 200
                 request.halt
